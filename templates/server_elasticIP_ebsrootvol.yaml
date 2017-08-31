@@ -1,0 +1,96 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS CloudFormation Sample Template Sample template EIP_With_Association:
+  This template shows how to associate an Elastic IP address with an Amazon EC2 instance
+  - you can use this same technique to associate an EC2 instance with an Elastic IP
+  Address that is not created inside the template by replacing the EIP reference in
+  the AWS::EC2::EIPAssoication resource type with the IP address of the external EIP.
+  **WARNING** This template creates an Amazon EC2 instance and an Elastic IP Address.
+  You will be billed for the AWS resources used if you create a stack from this template.'
+Outputs:
+    InstanceIPAddress:
+        Description: IP address of the newly created EC2 instance
+        Value: {Ref: IPAddress}
+    InstanceId:
+        Description: InstanceId of the newly created EC2 instance
+        Value: {Ref: EC2Instance}
+Parameters:
+    InstanceType:
+        ConstraintDescription: must be a valid EC2 instance type.
+        Default: t2.small
+        Description: ML Instance Type
+        Type: String
+    KeyName:
+        ConstraintDescription: must be the name of an existing EC2 KeyPair.
+        Description: Name of an existing EC2 KeyPair to enable SSH access to the instances
+        Type: AWS::EC2::KeyPair::KeyName
+    VolumeSize:
+        Type: Number
+        Description: The size of the EBS block device to attach to the instance
+        Default: 25
+    VolumeType:
+        Type: String
+        Default: "gp2"
+        AllowedValues: ["gp2", "st1"]
+        Description: "The type of storage volume for your instance. gp2: General Purpose SSD. st1: Standard HDD. SSD is more expensive per GB-Hour." 
+    # AvailabilityZone:
+    #     Type: String
+    #     Default: "us-east-2"
+    #     Description: The availability zone for your resources
+    SSHLocation:
+        AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+        ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+        Default: 0.0.0.0/0
+        Description: The IP address range that can be used to SSH to the EC2 instancesa
+        MaxLength: '18'
+        MinLength: '9'
+        Type: String
+Resources:
+    # BlockStorage:
+    #     Type: AWS::EC2::Volume
+    #     Properties:
+    #         # This gets the availability zone of the resource EC2Instance
+    #         AvailabilityZone: { "Fn::GetAtt" : [ "EC2Instance", "AvailabilityZone" ] }
+    #         Size: {Ref: VolumeSize}
+    #         VolumeType: {Ref: VolumeType}
+    #         SnapshotId: "snap-002d7b94d0cdf1acd"
+    EC2Instance:
+        Type: AWS::EC2::Instance
+        Properties:
+            # This image ID is Ubuntu 16.04, EBS backed, with HVM
+            # virtualization. HVM virt is required for GPU instances
+            ImageId: ami-dbbd9dbe
+            BlockDeviceMappings: 
+                - "DeviceName": "/dev/sda1"
+                  "Ebs": {"VolumeSize": {Ref: VolumeSize}, "VolumeType": {Ref: VolumeType},
+                          "SnapshotId": "snap-002d7b94d0cdf1acd"}
+            InstanceType: {Ref: InstanceType}
+            SecurityGroups: 
+                - {Ref: InstanceSecurityGroup}
+            KeyName: {Ref: KeyName}
+            # AvailabilityZone: {Ref: AvailabilityZone}
+    # AttachVolume:
+    #     Type: AWS::EC2::VolumeAttachment 
+    #     Properties:
+    #         InstanceId: {Ref: EC2Instance}
+    #         VolumeId: {Ref: BlockStorage}
+    #         Device: "/dev/sdf"
+    IPAddress:
+        Type: AWS::EC2::EIP
+    IPAssoc:
+        Type: AWS::EC2::EIPAssociation
+        Properties:
+            EIP: {Ref: IPAddress}
+            InstanceId: {Ref: EC2Instance}
+    InstanceSecurityGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            GroupDescription: Enable SSH access
+            # -1 means all 
+            # 0.0.0.0/0 means any IP4 address
+            # SecurityGroupEgress:
+            #     - {"CidrIp": 0.0.0.0/0, "IpProtocol": -1, "FromPort": -1, "ToPort": -1}
+            SecurityGroupIngress:
+                - {"CidrIp": {Ref: SSHLocation}, "FromPort": '22', "IpProtocol": tcp,
+                   "ToPort": '22'}
+                # Enable public access to jupyter notebooks
+                - {"CidrIp": {Ref: SSHLocation}, "FromPort": 8008, "ToPort": 8008, "IpProtocol": tcp}
