@@ -16,7 +16,8 @@ Outputs:
 Parameters:
     InstanceType:
         ConstraintDescription: must be a valid EC2 instance type.
-        Default: t2.small
+        # Default: t2.small
+        Default: p2.xlarge 
         Description: ML Instance Type
         Type: String
     KeyName:
@@ -44,6 +45,42 @@ Parameters:
         MaxLength: '18'
         MinLength: '9'
         Type: String
+Mappings:
+    # The AMI ID for the Ubuntu 16.04 image we want changes depending on the
+    # region. This is here so we can grab the right ID depending on the region
+    # the instance is being deployed to. TODO: This works but is kind of
+    # brittle in the sense that if these images get removed things will break.
+    # The correct way to do it would be to autogenerate this mapping somehow
+    # and insert the correct ID at runtime
+    RegionToAMIID:
+        us-east-2: 
+            image: "ami-dbbd9dbe"    
+        sa-east-1:   
+            image: "ami-a41869c8" 
+        eu-central-1:    
+            image: "ami-958128fa"    
+        us-west-1:   
+            image: "ami-969ab1f6" 
+        us-west-2:   
+            image: "ami-8803e0f0" 
+        ap-northeast-2:  
+            image: "ami-536ab33d"    
+        ca-central-1:    
+            image: "ami-a9c27ccd"    
+        eu-west-2:   
+            image: "ami-03998867" 
+        ap-southeast-1:  
+            image: "ami-9f28b3fc"    
+        eu-west-1:   
+            image: "ami-674cbc1e" 
+        ap-southeast-2:  
+            image: "ami-bb1901d8"    
+        ap-northeast-1:  
+            image: "ami-0417e362"    
+        us-east-1:   
+            image: "ami-1d4e7a66" 
+        ap-south-1:  
+            image: "ami-df413bb0" 
 Resources:
     # BlockStorage:
     #     Type: AWS::EC2::Volume
@@ -58,7 +95,7 @@ Resources:
         Properties:
             # This image ID is Ubuntu 16.04, EBS backed, with HVM
             # virtualization. HVM virt is required for GPU instances
-            ImageId: ami-dbbd9dbe
+            ImageId: !FindInMap [RegionToAMIID, {Ref: "AWS::Region"}, image]
             BlockDeviceMappings: 
                 - "DeviceName": "/dev/sda1"
                   "Ebs": {"VolumeSize": {Ref: VolumeSize}, "VolumeType": {Ref: VolumeType},

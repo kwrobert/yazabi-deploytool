@@ -127,7 +127,6 @@ def run_bootstrap(client):
     sftp.close()
     print("Executing bootstrap script ...")
     stdin, stdout, stderr = client.exec_command("sudo bash bootstrap.sh")
-    stdin.close()
     for oline, eline in zip_longest(iter(stdout.readline, ""),
                                     iter(stderr.readline, "")):
         if oline is not None:
@@ -137,6 +136,9 @@ def run_bootstrap(client):
     # for line in iter(stdout.readline, ""):
     # for line in iter(stderr.readline, ""):
     #     print(line, end="")
+    stdin.close()
+    stdout.close()
+    stderr.close()
     print('\nBootstrapping complete!\n')
     print('Instance is currently rebooting, access may be down for a few'
           ' minutes')
@@ -162,6 +164,31 @@ def deploy(args):
     else:
         raise ValueError('Did not receive an IP address')
 
+def _choose_stack(cf, action="delete"):
+    """
+    Reusable function that allows the user to pick a particular stack out of a
+    list of deployed stacks
+    """
+
+    resp = cf.describe_stacks()
+    names = [stack['StackName'] for stack in resp['Stacks']]
+    if not names:
+        print('There are no deployed stacks!')
+        quit()
+    msg_list = ""
+    for i, name in enumerate(names):
+        msg_list += "{}. {}\n".format(i+1, name)
+    msg = "Here are the stacks you have deployed:\n"+msg_list
+    msg += "Please choose the number of the stack you wish to {}: ".format(action)
+    stack_num = None
+    while not isinstance(stack_num, int) or stack_num == 0:
+        try:
+            stack_num = int(input(msg))
+        except ValueError:
+            continue
+    stackname = names[stack_num-1]
+    return stackname
+
 def delete(args):
     """
     Wrapper function to delete a stack. The name of the stack to delete is
@@ -174,37 +201,77 @@ def delete(args):
     if args.stackname is not None:
         stackname = args.stackname
     else:
-        resp = cf.describe_stacks()
-        print(resp['Stacks'])
-        names = [stack['StackName'] for stack in resp['Stacks']]
-        if not names:
-            print('There are no deployed stacks!')
-            return
-        msg_list = ""
-        for i, name in enumerate(names):
-            msg_list += "{}. {}\n".format(i+1, name)
-        msg = "Here are the stacks you have deployed:\n"+msg_list
-        msg += "Please choose the number of the stack you wish to delete: "
-        stack_num = None
-        while not isinstance(stack_num, int) or stack_num == 0:
-            try:
-                stack_num = int(input(msg))
-            except ValueError:
-                continue
-        stackname = names[stack_num-1]
-    info = cf.describe_stacks(StackName=args.stackname)
+        stackname = _choose_stack(cf)
+    info = cf.describe_stacks(StackName=stackname)['Stacks'][0]
     keyname = ""
     for par in info['Parameters']:
         if par['ParameterKey'] == 'KeyName':
             keyname = par['ParameterValue']
     if keyname:
-        print('Deleting keypair {}'.format(keyname))
+        print('Deleting keypair: {}'.format(keyname))
         ec2.delete_key_pair(KeyName=keyname)
-    print('Deleting stack {}'.format(stackname))
-    cf.delete_stack(StackName=names[stackname])
+    print('Deleting stack: {}'.format(stackname))
+    cf.delete_stack(StackName=stackname)
     delete_complete_waiter = cf.get_waiter('stack_delete_complete')
     delete_complete_waiter.wait(StackName=stackname)
     print('Deletion complete!')
+
+def stop(args):
+    """
+    Pause the instance within a stack, without destroying it, to preserve data
+    but save on CPU hours
+    """
+
+    cf = boto3.client('cloudformation')
+    ec2 = boto3.client('ec2')
+    if args.stackname is not None:
+        stackname = args.stackname
+    else:
+        stackname = _choose_stack(cf, action="stop")
+    info = cf.list_stack_resources(StackName=stackname)
+    inst_id = None
+    for resource in info['StackResourceSummaries']:
+        if resource['ResourceType'] == 'AWS::EC2::Instance':
+            inst_id = resource['PhysicalResourceId']
+
+    if inst_id:
+        ec2.stop_instances(InstanceIds=[inst_id])
+        stop_complete_waiter = ec2.get_waiter('instance_stopped')
+        stop_complete_waiter.wait(InstanceIds=[inst_id])
+        print('Instance successfully stopped!')
+    else:
+        print("Unable to stop instance, could not find running instances in"
+              " specified stack")
+    return None
+
+def start(args):
+    """
+    Resume the instance within a stack, without destroying it, to preserve data
+    but save on CPU hours
+    """
+
+    cf = boto3.client('cloudformation')
+    ec2 = boto3.client('ec2')
+    if args.stackname is not None:
+        stackname = args.stackname
+    else:
+        stackname = _choose_stack(cf, action="start")
+    info = cf.list_stack_resources(StackName=stackname)
+    inst_id = None
+    for resource in info['StackResourceSummaries']:
+        if resource['ResourceType'] == 'AWS::EC2::Instance':
+            inst_id = resource['PhysicalResourceId']
+
+    if inst_id:
+        ec2.start_instances(InstanceIds=[inst_id])
+        start_complete_waiter = ec2.get_waiter('instance_running')
+        start_complete_waiter.wait(InstanceIds=[inst_id])
+        print('Instance successfully started!')
+    else:
+        print("Unable to start instance, could not find stopped instances in"
+              " specified stack")
+
+    return None
 
 def main():
     parser = ap.ArgumentParser(description="""A tool for deploying a single
@@ -222,6 +289,16 @@ def main():
     parser_delete.add_argument('--stackname', help="""The name of the stack to
     delete""")
     parser_delete.set_defaults(func=delete)
+    parser_stop = subparsers.add_parser("stop", help="""Stop the instance in a
+    stack""")
+    parser_stop.add_argument('--stackname', help="""The name of the stack
+    containing the instance to stop""")
+    parser_stop.set_defaults(func=stop)
+    parser_start = subparsers.add_parser("start", help="""Resume the instance in a
+    stack""")
+    parser_start.add_argument('--stackname', help="""The name of the stack
+    containing the instance to start""")
+    parser_start.set_defaults(func=start)
     args = parser.parse_args()
     args.func(args)
 

@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# This just supresses warnings from apt when it tires to access stdin
+export DEBIAN_FRONTEND=noninteractive
+
 echo "############## Upgrading and Installing standard packages ###############"
 apt update
 apt upgrade -y
