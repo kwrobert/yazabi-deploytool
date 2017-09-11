@@ -102,11 +102,12 @@ def upload_cudnn(ip, keyfile):
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(ip, username='ubuntu', key_filename=keyfile)
     sftp = ssh.open_sftp()
-    cudnn_path = input('Please enter the path to the cuDNN tar file '
-                       '[./cudnn-8.0-linux-x64-v6.0.tgz]: ')
-    if not cudnn_path:
-        print('no entry')
-        cudnn_path = os.path.join(os.getcwd(), 'cudnn-8.0-linux-x64-v6.0.tgz')
+    cudnn_path = ''
+    while not os.path.isfile(cudnn_path):
+        cudnn_path = input('Please enter the path to the cuDNN tar file '
+                           '[./cudnn-8.0-linux-x64-v6.0.tgz]: ')
+        if not cudnn_path:
+            cudnn_path = os.path.join(os.getcwd(), 'cudnn-8.0-linux-x64-v6.0.tgz')
     remotepath = '/home/ubuntu/cudnn-8.0-linux-x64-v6.0.tgz'
     print('Beginning upload ...')
     sftp.put(cudnn_path, remotepath, callback=printTotals)
