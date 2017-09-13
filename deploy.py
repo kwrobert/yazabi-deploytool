@@ -34,7 +34,7 @@ def create_keypair(name):
     os.chmod(keyfilename, 0o600)
     return name
 
-def deploy_template(keyname, stackname):
+def deploy_template(keyname, stackname, vsize, inst_type):
     """
     Deploys the template file using aws cloudformation
     """
@@ -51,6 +51,14 @@ def deploy_template(keyname, stackname):
                 {
                     'ParameterKey': "KeyName",
                     'ParameterValue': keyname
+                },
+                {
+                    'ParameterKey': "VolumeSize",
+                    'ParameterValue': vsize
+                },
+                {
+                    'ParameterKey': "InstanceType",
+                    'ParameterValue': inst_type
                 }
             ],
             OnFailure="ROLLBACK")
@@ -134,9 +142,6 @@ def run_bootstrap(client):
             print(oline, end="")
         if eline is not None:
             print(eline, end="")
-    # for line in iter(stdout.readline, ""):
-    # for line in iter(stderr.readline, ""):
-    #     print(line, end="")
     stdin.close()
     stdout.close()
     stderr.close()
@@ -148,12 +153,14 @@ def deploy(args):
     """
     Wrapper function to tie together all the steps for deployment
     """
+
     # We need to create the SSH keypair first because AWS CloudFormation doesn't
     # support creating keypairs. We create it within AWS so we need not assume
     # anything about existing key generation tools
     keyname = create_keypair(args.keyname)
     # Now we need to deploy the template.
-    server_ip = deploy_template(keyname, args.stackname)
+    server_ip = deploy_template(keyname, args.stackname, args.volume, 
+                                args.instance)
     # Copy up the cuDNN libs
     ssh_client = upload_cudnn(server_ip, '{}.pem'.format(keyname))
     # Finally, run the bootstrap script
@@ -197,6 +204,7 @@ def delete(args):
     and present them to the user, allowing them to choose which stack to delete
     or to cancel the operation
     """
+
     cf = boto3.client('cloudformation')
     ec2 = boto3.client('ec2')
     if args.stackname is not None:
@@ -277,7 +285,7 @@ def start(args):
 def main():
     parser = ap.ArgumentParser(description="""A tool for deploying a single
     server, backed by a persistent EBS volume and with a public Elastic IP
-    address to AWS automatically via CloudFormation. This tool will also run a
+    address, to AWS automatically via CloudFormation. This tool will also run a
     bootstrap script to get you up and running with Tensorflow on Python3""")
     subparsers = parser.add_subparsers(dest="subparser_name", help="[sub-command] help]")
     parser_deploy = subparsers.add_parser("deploy", help="Deploy the stack")
@@ -285,6 +293,11 @@ def main():
                                help="""The name of the stack to deploy""")
     parser_deploy.add_argument('--keyname', default="YazabiServerKeypair",
                                help="""The name of the keypair to deploy""")
+    parser_deploy.add_argument('--instance', type=str, default="p2.xlarge",
+                               help="""The type of instance to deploy""")
+    parser_deploy.add_argument('--volume', type=str, default="25",
+                               help="""The size in GB of the volume to attach
+                               to the instance""")
     parser_deploy.set_defaults(func=deploy)
     parser_delete = subparsers.add_parser("delete", help="Delete a stack")
     parser_delete.add_argument('--stackname', help="""The name of the stack to
