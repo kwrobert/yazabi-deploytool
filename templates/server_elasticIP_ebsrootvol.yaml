@@ -98,8 +98,7 @@ Resources:
             ImageId: !FindInMap [RegionToAMIID, {Ref: "AWS::Region"}, image]
             BlockDeviceMappings: 
                 - "DeviceName": "/dev/sda1"
-                  "Ebs": {"VolumeSize": {Ref: VolumeSize}, "VolumeType": {Ref: VolumeType},
-                          "SnapshotId": "snap-002d7b94d0cdf1acd"}
+                  "Ebs": {"VolumeSize": {Ref: VolumeSize}, "VolumeType": {Ref: VolumeType}}
             InstanceType: {Ref: InstanceType}
             SecurityGroups: 
                 - {Ref: InstanceSecurityGroup}
