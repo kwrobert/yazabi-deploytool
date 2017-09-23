@@ -1,10 +1,31 @@
 import argparse as ap
 from datetime import datetime
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, WaiterError
 from itertools import zip_longest
 import os
 import boto3
 import paramiko
+
+class StackError(Exception):
+    """
+    An exception to raise when the stack creation fails
+    """
+    
+    def __init__(self, op, resp):
+        msg = self.build_msg(op, resp)
+        super(StackError, self).__init__(msg)
+
+    def build_msg(self, op, resp):
+        stack_events = resp['StackEvents']
+        errs = [event for event in stack_events if event['ResourceStatus'] ==
+                'CREATE_FAILED']
+        msg_body = "The following resources failed during stack {}:\n\n"
+        msg_body.format(op)
+        for err in errs:
+            entry = "Resource Type: {}\nResource ID: {}\nReason: {}\n".format(
+                err['ResourceType'], err['LogicalResourceId'], err['ResourceStatusReason'])
+            msg_body += entry
+        return msg_body
 
 def create_keypair(name):
     """
@@ -83,7 +104,12 @@ def deploy_template(keyname, stackname, vsize, inst_type):
             raise
     print('Waiting for stack creation to complete ...')
     create_complete_waiter = cf.get_waiter('stack_create_complete')
-    create_complete_waiter.wait(StackName=stackname)
+    try:
+        create_complete_waiter.wait(StackName=stackname)
+    except WaiterError:
+        resp = cf.describe_stack_events(StackName=stackname)
+        raise StackError("create", resp)
+
     stack_info = cf.describe_stacks(StackName=stackname)
     outputs = stack_info['Stacks'][0]['Outputs']
     ip_addr = None
@@ -222,7 +248,11 @@ def delete(args):
     print('Deleting stack: {}'.format(stackname))
     cf.delete_stack(StackName=stackname)
     delete_complete_waiter = cf.get_waiter('stack_delete_complete')
-    delete_complete_waiter.wait(StackName=stackname)
+    try:
+        delete_complete_waiter.wait(StackName=stackname)
+    except WaiterError:
+        resp = cf.describe_stack_events(StackName=stackname)
+        raise StackError("delete", resp)
     print('Deletion complete!')
 
 def stop(args):
