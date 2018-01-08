@@ -16,8 +16,8 @@ Outputs:
 Parameters:
     InstanceType:
         ConstraintDescription: must be a valid EC2 instance type.
-        # Default: t2.small
-        Default: p2.xlarge 
+        Default: t2.micro
+        # Default: p2.xlarge 
         Description: ML Instance Type
         Type: String
     KeyName:
@@ -27,7 +27,7 @@ Parameters:
     VolumeSize:
         Type: Number
         Description: The size of the EBS block device to attach to the instance
-        Default: 25
+        Default: 40
     VolumeType:
         Type: String
         Default: "gp2"

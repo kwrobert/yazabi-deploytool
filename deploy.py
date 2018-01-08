@@ -317,7 +317,7 @@ def main():
     server, backed by a persistent EBS volume and with a public Elastic IP
     address, to AWS automatically via CloudFormation. This tool will also run a
     bootstrap script to get you up and running with Tensorflow on Python3""")
-    subparsers = parser.add_subparsers(dest="subparser_name", help="[sub-command] help]")
+    subparsers = parser.add_subparsers(title="subcommands", metavar='')
     parser_deploy = subparsers.add_parser("deploy", help="Deploy the stack")
     parser_deploy.add_argument('--stackname', default="YazabiServerStack",
                                help="""The name of the stack to deploy""")
@@ -344,6 +344,8 @@ def main():
     containing the instance to start""")
     parser_start.set_defaults(func=start)
     args = parser.parse_args()
+    print(args)
+    quit()
     args.func(args)
 
 
